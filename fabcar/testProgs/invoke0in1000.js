@@ -13,7 +13,7 @@ var path = require('path');
 var util = require('util');
 var os = require('os');
 var LineByLineReader = require('line-by-line'),
-    lr = new LineByLineReader('datasets/1in100.txt');
+    lr = new LineByLineReader('datasets/stemp0in1000.txt');
 var inc = 1;
 
 lr.on('error', function (err) {
@@ -172,7 +172,7 @@ lr.on('line', function (line) {
 
 		inc += 1;
 		lr.resume();
-	}, 4000);
+	}, 5000);
 });
 
 

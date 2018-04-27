@@ -7,9 +7,10 @@
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "dependencies": {
-        "fabric-ca-client": "unstable",
-        "fabric-client": "unstable",
-        "grpc": "^1.6.0"
+        "fabric-ca-client": "~1.1.0",
+        "fabric-client": "~1.1.0",
+        "grpc": "^1.6.0",
+        "line-by-line": "^0.1.6"
     },
     "author": "Anthony O'Dowd",
     "license": "Apache-2.0",

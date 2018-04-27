@@ -25,7 +25,7 @@
 package main
 
 /* Imports
- * 4 utility libraries for formatting, handling bytes, reading and writing JSON, and string manipulation
+ * 5 utility libraries for formatting, handling bytes, reading and writing JSON, string manipulation, and math operations
  * 2 specific Hyperledger Fabric specific libraries for Smart Contracts
  */
 import (
@@ -33,6 +33,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"math"
 
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	sc "github.com/hyperledger/fabric/protos/peer"
@@ -42,12 +43,13 @@ import (
 type SmartContract struct {
 }
 
-// Define the car structure, with 4 properties.  Structure tags are used by encoding/json library
-type Car struct {
-	Make   string `json:"make"`
-	Model  string `json:"model"`
-	Colour string `json:"colour"`
-	Owner  string `json:"owner"`
+// Define the temp sensor structure
+type TempSensor struct {
+        Temp string `json:"temp"`
+        Peer0 string `json:"peer0"`
+        Peer1 string `json:"peer1"`
+        Peer2 string `json:"peer2"`
+        Resp string `json:"resp"`
 }
 
 /*
@@ -67,75 +69,106 @@ func (s *SmartContract) Invoke(APIstub shim.ChaincodeStubInterface) sc.Response 
 	// Retrieve the requested Smart Contract function and arguments
 	function, args := APIstub.GetFunctionAndParameters()
 	// Route to the appropriate handler function to interact with the ledger appropriately
-	if function == "queryCar" {
-		return s.queryCar(APIstub, args)
+	if function == "queryTemp" {
+		return s.queryTemp(APIstub, args)
 	} else if function == "initLedger" {
 		return s.initLedger(APIstub)
-	} else if function == "createCar" {
-		return s.createCar(APIstub, args)
-	} else if function == "queryAllCars" {
-		return s.queryAllCars(APIstub)
-	} else if function == "changeCarOwner" {
-		return s.changeCarOwner(APIstub, args)
+	} else if function == "createTemp" {
+		return s.createTemp(APIstub, args)
+	} else if function == "queryAllTemps" {
+		return s.queryAllTemps(APIstub)
 	}
 
 	return shim.Error("Invalid Smart Contract function name.")
 }
 
-func (s *SmartContract) queryCar(APIstub shim.ChaincodeStubInterface, args []string) sc.Response {
+func (s *SmartContract) queryTemp(APIstub shim.ChaincodeStubInterface, args []string) sc.Response {
 
 	if len(args) != 1 {
 		return shim.Error("Incorrect number of arguments. Expecting 1")
 	}
 
-	carAsBytes, _ := APIstub.GetState(args[0])
-	return shim.Success(carAsBytes)
+	tempAsBytes, _ := APIstub.GetState(args[0])
+	return shim.Success(tempAsBytes)
 }
 
 func (s *SmartContract) initLedger(APIstub shim.ChaincodeStubInterface) sc.Response {
-	cars := []Car{
-		Car{Make: "Toyota", Model: "Prius", Colour: "blue", Owner: "Tomoko"},
-		Car{Make: "Ford", Model: "Mustang", Colour: "red", Owner: "Brad"},
-		Car{Make: "Hyundai", Model: "Tucson", Colour: "green", Owner: "Jin Soo"},
-		Car{Make: "Volkswagen", Model: "Passat", Colour: "yellow", Owner: "Max"},
-		Car{Make: "Tesla", Model: "S", Colour: "black", Owner: "Adriana"},
-		Car{Make: "Peugeot", Model: "205", Colour: "purple", Owner: "Michel"},
-		Car{Make: "Chery", Model: "S22L", Colour: "white", Owner: "Aarav"},
-		Car{Make: "Fiat", Model: "Punto", Colour: "violet", Owner: "Pari"},
-		Car{Make: "Tata", Model: "Nano", Colour: "indigo", Owner: "Valeria"},
-		Car{Make: "Holden", Model: "Barina", Colour: "brown", Owner: "Shotaro"},
+	temps := []TempSensor{
+                TempSensor{Temp: "0",Peer0: "none",Peer1: "none",Peer2: "none",Resp: "none"},
 	}
 
+	//initialize the ledger with a blank record
 	i := 0
-	for i < len(cars) {
+	for i < len(temps) {
 		fmt.Println("i is ", i)
-		carAsBytes, _ := json.Marshal(cars[i])
-		APIstub.PutState("CAR"+strconv.Itoa(i), carAsBytes)
-		fmt.Println("Added", cars[i])
+		tempAsBytes, _ := json.Marshal(temps[i])
+		APIstub.PutState("TEMP"+strconv.Itoa(i), tempAsBytes)
+		fmt.Println("Added", temps[i])
 		i = i + 1
 	}
 
 	return shim.Success(nil)
 }
 
-func (s *SmartContract) createCar(APIstub shim.ChaincodeStubInterface, args []string) sc.Response {
+func (s *SmartContract) createTemp(APIstub shim.ChaincodeStubInterface, args []string) sc.Response {
 
-	if len(args) != 5 {
-		return shim.Error("Incorrect number of arguments. Expecting 5")
+	if len(args) != 4 {
+		return shim.Error("Incorrect number of arguments. Expecting 4")
 	}
 
-	var car = Car{Make: args[1], Model: args[2], Colour: args[3], Owner: args[4]}
+	//declare variables for the peers individual decision and the group response, as well as the acceptable temp delta
+	var res = "none"
+	var dec = "none"
+	var acp = 1.1
 
-	carAsBytes, _ := json.Marshal(car)
-	APIstub.PutState(args[0], carAsBytes)
+	//get the number of the transaction e.g. 'TEMP5' -> 5
+	num, _ := strconv.Atoi(args[0][4:])
+
+	//if this is the first transaction, accept. if not, query the blockchain for the previous transaction, compare
+	//its temp with the new temp, and accept if the delta is acceptable reject if not
+	if (num > 1){
+		var checkKey = "TEMP" + strconv.Itoa(num - 1)
+		t := TempSensor{}
+		tempAsBytes2, _ := APIstub.GetState(checkKey)
+		json.Unmarshal(tempAsBytes2, &t)
+		otemp, _ := strconv.ParseFloat(t.Temp, 64)
+		ntemp, _ := strconv.ParseFloat(args[1], 64)
+		if (math.Abs(otemp - ntemp) > acp){
+			dec = "reject"
+		} else {
+			dec = "accept"
+		}
+	} else {
+		dec = "accept"
+	}
+
+	//compare the peer's decision against those of the 'false peers'
+	//if they all agree, accept. otherwise, reject with dissenting peer
+	if (dec != args[2] || dec != args[3] || args[2] != args[3]) {
+		if (dec == args[2]){
+			res = "unsuccessful-peer2"
+		} else if (dec == args[3]) {
+			res = "unsuccessful-peer1"
+		} else {
+			res = "unsuccessful-peer0"
+		}
+	} else {
+		res = "successful"
+	}
+
+
+	//set the full transaction request and append to the blockchain
+	var temp = TempSensor{Temp: args[1],Peer0: dec,Peer1: args[2],Peer2: args[3],Resp: res}
+	tempAsBytes, _ := json.Marshal(temp)
+	APIstub.PutState(args[0], tempAsBytes)
 
 	return shim.Success(nil)
 }
 
-func (s *SmartContract) queryAllCars(APIstub shim.ChaincodeStubInterface) sc.Response {
+func (s *SmartContract) queryAllTemps(APIstub shim.ChaincodeStubInterface) sc.Response {
 
-	startKey := "CAR0"
-	endKey := "CAR999"
+	startKey := "TEMP0"
+	endKey := "TEMP999"
 
 	resultsIterator, err := APIstub.GetStateByRange(startKey, endKey)
 	if err != nil {
@@ -170,27 +203,9 @@ func (s *SmartContract) queryAllCars(APIstub shim.ChaincodeStubInterface) sc.Res
 	}
 	buffer.WriteString("]")
 
-	fmt.Printf("- queryAllCars:\n%s\n", buffer.String())
+	fmt.Printf("- queryAllTemps:\n%s\n", buffer.String())
 
 	return shim.Success(buffer.Bytes())
-}
-
-func (s *SmartContract) changeCarOwner(APIstub shim.ChaincodeStubInterface, args []string) sc.Response {
-
-	if len(args) != 2 {
-		return shim.Error("Incorrect number of arguments. Expecting 2")
-	}
-
-	carAsBytes, _ := APIstub.GetState(args[0])
-	car := Car{}
-
-	json.Unmarshal(carAsBytes, &car)
-	car.Owner = args[1]
-
-	carAsBytes, _ = json.Marshal(car)
-	APIstub.PutState(args[0], carAsBytes)
-
-	return shim.Success(nil)
 }
 
 // The main function is only relevant in unit test mode. Only included here for completeness.

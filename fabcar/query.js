@@ -114,7 +114,7 @@ function processLine(line) {
 }
 
 function writeResults(qrar) {
-	var ws = fs.createWriteStream("testResults/results1in100.txt"); //file to output results to
+	var ws = fs.createWriteStream("testResults/results.txt"); //file to output results to
 	var count = 0;
 	var fcount = 0;
 	for (var i = 0; i < qrar.length; i++) {
